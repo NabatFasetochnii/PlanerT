@@ -129,8 +129,8 @@ if (Tess_List is not None) & (len(Tess_List) > 0):
             colors = []
             comments = []
 
-            if (num - row - 1) < biba:
-                delim = num - row - 1
+            if (num - row) < biba:
+                delim = num - row
             else:
                 delim = biba
 
