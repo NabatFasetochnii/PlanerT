@@ -10,7 +10,7 @@ from astropy.table import Table
 from astropy.time import Time, TimeDelta
 from astropy.utils import iers
 from TTF import TTF_Query  # (DateObs, min_depth, Target)
-from Utils import Get_Exp_Master, Check_AzEl, Get_Coo, Get_Times, Check_El
+from Utils import *
 from matplotlib.backends.backend_pdf import PdfPages
 
 # mpl.rcParams["figure.figsize"] = [6.4, 4.8]
@@ -19,8 +19,8 @@ mpl.use('Agg')
 iers.conf.auto_download = False
 warnings.simplefilter("ignore")
 #################################################################
-min_depth = 3.0
-max_mag = 16.
+min_depth = 6.0
+max_mag = 14.
 Kou = EarthLocation(lat=57.036537 * u.deg, lon=59.545735 * u.deg, height=290 * u.m)
 
 #################################################################
@@ -69,6 +69,7 @@ biba = 20
 print('number of objects is', num)
 Name = 'PlanT.pdf'
 # AttributeError: 'bool' object has no attribute 'any'
+data_for_task = []
 
 if (Tess_List is not None) & (len(Tess_List) > 0):
 
@@ -148,6 +149,7 @@ if (Tess_List is not None) & (len(Tess_List) > 0):
                     # get position
                     Ra, Dec = Get_Coo(Tess_List['coords(J2000)'][row + i])
                     Eq = SkyCoord(ra=Ra * u.deg, dec=Dec * u.deg, frame='icrs')
+
                     ObsAltAz = Eq.transform_to(AltAz(obstime=ObsTime, location=Kou))
                     ObsAltAz = Table([ObsAltAz.obstime, ObsAltAz.alt, ObsAltAz.az], names=('obstime', 'El', 'Az'))
                     TrAltAz = Eq.transform_to(AltAz(obstime=TrTime, location=Kou))
@@ -161,23 +163,27 @@ if (Tess_List is not None) & (len(Tess_List) > 0):
                     sep = Moon.separation(Eq).degree
                     sep = np.round(sep, 2)
 
-                    colors.append(['w', 'w', 'w', 'w', 'w', 'w', 'w', 'w', 'w'])
+                    # if sep < 90:
+                    #     continue
+
                     if Check_AzEl(Tess_List['coords(J2000)'][row + i], Tess_List['az_start'][row + i]):
+                        # continue
                         colors[-1][1] = 'lightpink'  # bad master angle
                         # status[row] = status[row] + 1
+                    colors.append(['w', 'w', 'w', 'w', 'w', 'w', 'w', 'w', 'w'])
                     Exp = Get_Exp_Master(Tess_List['V'][row + i])
                     if Exp <= 2:
                         colors[-1][6] = 'lightpink'  # short exposure
                         # status[row] = status[row] + 1
                     if Tess_List['V'][row + i] > 14:
                         colors[-1][5] = 'lightpink'  # faint star
-                        # status[row] = status[row] + 1
+                    #     # status[row] = status[row] + 1
                     if Tess_List['depth(mmag)'][row + i] < 6:
                         colors[-1][4] = 'lightpink'  # min depth
-                        # status[row] = status[row] + 1
+                    #     # status[row] = status[row] + 1
                     if sep < 90:
                         colors[-1][7] = 'lightpink'  # moon distance
-                        # status[row] = status[row] + 1
+                    #     # status[row] = status[row] + 1
                     if Tess_List['priority'][row + i] < 3:
                         colors[-1][8] = 'lightgreen'  # priority
                         # status[row] = status[row] - 1
@@ -187,6 +193,8 @@ if (Tess_List is not None) & (len(Tess_List) > 0):
 
                     Begin = ObsAltAz['obstime'][0].datetime.strftime('%Y-%m-%d %H:%M:%S')
                     Duration = round((ObsAltAz['obstime'][-1].jd - ObsAltAz['obstime'][0].jd) * 24, 2)
+                    data_for_task.append([Tess_List['coords(J2000)'][row + i], Begin, Duration, Get_Exp_Master(Tess_List['V'][row + i]),
+                                          Tess_List['Name'][row + i].replace('.', '_').replace(' ', '')])
                     Data.append([Tess_List['Name'][row + i].replace('.', '_').replace(' ', ''),
                                  Tess_List['coords(J2000)'][row + i],
                                  Begin,
@@ -208,9 +216,12 @@ if (Tess_List is not None) & (len(Tess_List) > 0):
                                 color=D[-1].get_color(), linewidth=2)
                 #        colors[-1][0] = D[-1].get_color()
 
-            the_table = axs[1].table(cellText=Data, colLabels=collabel,
-                                     colWidths=widths, cellColours=colors,
-                                     loc='upper center')
+            try:
+                the_table = axs[1].table(cellText=Data, colLabels=collabel,
+                                         colWidths=widths, cellColours=colors,
+                                         loc='upper center')
+            except:
+                continue
             the_table.auto_set_font_size(False)
             the_table.set_fontsize(6)
 
@@ -223,7 +234,7 @@ if (Tess_List is not None) & (len(Tess_List) > 0):
             axs[0].set_xlabel('UTC, ' + Start.datetime.strftime('%Y-%m-%d'), fontsize=6)
             axs[0].set_ylim(-20, None)
             axs[0].set_ylabel('Elevation (deg)', fontsize=6)
-            axs[0].legend(loc=3, fontsize=6)
+            axs[0].legend(loc='best', fontsize=6)
             axs[0].grid()
 
             fig.suptitle(Title, fontsize=8)
@@ -235,23 +246,14 @@ else:
     Title = 'List is empty for some reasons. Maybe night starts/ends at nautical twilight'
     print(Title)
 
-#################################################################
-# axs[0].set_xticks(np.linspace(0, 23, 24))
-# axs[0].set_xticklabels(['07', '08', '09', '10', '11', '12', '13', '14', '15',
-#                         '16', '17', '18', '19', '20', '21', '22', '23', '00',
-#                         '01', '02', '03', '04', '05', '06'])
-# axs[0].tick_params(axis='both', labelsize=6, direction='in')
-# axs[0].set_xlim(Min_lim, Max_lim)
-# axs[0].set_xlabel('UTC, ' + Start.datetime.strftime('%Y-%m-%d'), fontsize=6)
-# axs[0].set_ylim(-20, None)
-# axs[0].set_ylabel('Elevation (deg)', fontsize=6)
-# axs[0].legend(loc=3, fontsize=6)
-# axs[0].grid()
-#
-# fig.suptitle(Title, fontsize=8)
-
-# Path2Save = str(DT)
-# if not os.path.exists(Path2Save):
-#     os.makedirs(Path2Save)
-
-# plt.savefig(Name)
+while True:
+    Coords = input('Insert coords(J2000): ')
+    data_for_task = np.array(data_for_task)
+    be = np.where(data_for_task[:, 0] == Coords)[0][0]
+    Ra, Dec = Get_Coo(Coords)
+    number = int(float(data_for_task[be][2])*60.*60./float(data_for_task[be][3]))
+    Send_Task(data_for_task[be][1], data_for_task[be][2], Ra, Dec,
+              data_for_task[be][3], number, data_for_task[be][4])
+    done = input('Done. Do you want add another task? (y/n)')
+    if done is ('n' or 'no' or 'No' or 'N'):
+        break
